@@ -18,8 +18,15 @@ directories to somebody else. The two are independent and can run at once.
 STARTING IT
 ===========
 
-Write /etc/exports first; see exports.example for the format and for what
-the options mean. Then, in this order:
+Write /etc/exports first. doc/examples/exports in the source tree is a
+commented example, and a snapshot installs it as /etc/exports with every
+line commented out. Until you uncomment something, mountd and nfsd will
+refuse to start with
+
+    nfsd: /etc/exports defines no exports
+
+which is deliberate: a server that offers nothing is a mistake in the
+configuration rather than a state worth running in. Then, in this order:
 
     portmap
     mountd

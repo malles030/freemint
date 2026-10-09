@@ -403,6 +403,9 @@ copy_sysroot() {
 	cp "$SRC/tools/net-tools/.compile_$TARGET/slattach" "$SYSROOT/bin/slattach"
 	cp "$SRC/tools/net-tools/slinkctl/.compile_$TARGET/slinkctl" "$SYSROOT/bin/slinkctl"
 	cp "$SRC/tools/nfs/.compile_$TARGET/mount_nfs" "$SYSROOT/bin/mount_nfs"
+	cp "$SRC/tools/nfsd/.compile_$TARGET/portmap" "$SYSROOT/bin/portmap"
+	cp "$SRC/tools/nfsd/.compile_$TARGET/mountd" "$SYSROOT/bin/mountd"
+	cp "$SRC/tools/nfsd/.compile_$TARGET/nfsd" "$SYSROOT/bin/nfsd"
 	cp "$SRC/tools/strace/.compile_$TARGET/strace" "$SYSROOT/bin/strace"
 	cp "$SRC/tools/swkbdtbl/.compile_$TARGET/swkbdtbl" "$SYSROOT/bin/swkbdtbl"
 	cp "$SRC/tools/sysctl/.compile_$TARGET/sysctl" "$SYSROOT/bin/sysctl"
@@ -459,6 +462,10 @@ create_filesystem() {
 
 	cp "$SRC/doc/examples/fscheck.sh" "$SYSROOT/bin"
 	cp "$SRC/doc/examples/fstab" "$SYSROOT/etc"
+	# Every line in it is commented out, so nothing is exported until
+	# somebody edits it -- mountd and nfsd refuse to start on an exports
+	# file that defines nothing, and say so.
+	cp "$SRC/doc/examples/exports" "$SYSROOT/etc/exports"
 
 	cp -r "$TERADESK_DIR" "$SYSROOT/opt/GEM"
 	cp -r "$QED_DIR" "$SYSROOT/opt/GEM"

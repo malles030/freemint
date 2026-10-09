@@ -59,6 +59,7 @@ for f in tools/crypto/CRYPTODEFS \
 	tools/mktbl/MKTBLDEFS \
 	tools/net-tools/NETTOOLSDEFS \
 	tools/nfs/NFSDEFS \
+	tools/nfsd/NFSDDEFS \
 	tools/nohog2/NOHOG2DEFS \
 	tools/strace/STRACEDEFS \
 	tools/swkbdtbl/SWKBDTBLDEFS \
