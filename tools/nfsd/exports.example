@@ -1,0 +1,45 @@
+#
+# /etc/exports -- which directories this machine offers over NFS.
+#
+# One line per export:
+#
+#	<directory>	<client>(<options>)
+#
+# <client> is a single address, an address with a prefix length, or "*":
+#
+#	192.168.1.5		that one machine
+#	192.168.1.0/24		that network
+#	*			anyone who can reach the port
+#
+# An NFSv3 export is restricted by address and by nothing else. The uid in
+# a request is the client's own word for itself -- AUTH_UNIX carries no
+# proof of it -- so the address list is the only real control there is.
+# Keep it as narrow as the use allows, and do not put "*" on an export that
+# can be written.
+#
+# Options, with the defaults in brackets:
+#
+#	ro		  refuse every write			[default]
+#	rw		  allow writes
+#	root_squash	  map uid 0 to anonuid			[default]
+#	no_root_squash	  leave uid 0 alone
+#	all_squash	  map every caller to anonuid
+#	no_all_squash	  leave uids alone			[default]
+#	anonuid=N	  the uid to map to			[65534]
+#	anongid=N	  the gid to map to			[65534]
+#
+# An option that is not recognised is an error rather than something to
+# ignore: a typo must not leave an export more open than the line reads.
+#
+# Read only unless the line says rw, for the same reason.
+#
+
+# A directory for one PC on the local network, writable.
+#/c/shared	192.168.1.5(rw,all_squash,anonuid=0,anongid=0)
+
+# Something for anyone to read.
+#/c/pub		192.168.1.0/24(ro)
+
+# all_squash with anonuid pointing at a real account is usually what an
+# Atari wants: the machine has one user, and without it a client writing as
+# some other uid gets permission denied on files it just created.

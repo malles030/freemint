@@ -1,0 +1,198 @@
+An NFS version 3 server for FreeMiNT
+====================================
+
+Three programs that let an Atari export directories to other machines:
+
+  portmap	the port mapper, program 100000 version 2, on port 111.
+		Clients ask it where the other two are, so it has to be
+		started first.
+  mountd	the MOUNT protocol, program 100005 version 3. Hands out the
+		first file handle for an export.
+  nfsd		NFS version 3 itself, program 100003, on port 2049.
+
+This is the other direction from sys/xfs/nfs3, which is the client: that one
+mounts somebody else's export onto the Atari, this one offers the Atari's own
+directories to somebody else. The two are independent and can run at once.
+
+
+STARTING IT
+===========
+
+Write /etc/exports first; see exports.example for the format and for what
+the options mean. Then, in this order:
+
+    portmap
+    mountd
+    nfsd
+
+Each one registers itself with the port mapper and refuses to start if it
+cannot, so a failure to start says what is wrong instead of leaving a
+half working server. Common options:
+
+    -d		log every request to stderr. Verbose, but it is the
+		quickest way to see which procedure a client is unhappy
+		with.
+    -e file	read a different exports file
+    -p port	listen on a particular port. For nfsd the default is 2049,
+		for mountd it is whatever the system gives out.
+    -n		do not register with the port mapper. Only useful for
+		testing, with a client that is told the ports directly.
+
+Check it from the other machine with
+
+    rpcinfo -p <atari>
+    showmount -e <atari>
+
+and mount it the usual way:
+
+    mount -t nfs -o vers=3 <atari>:/c/shared /mnt
+
+
+WHAT IS IMPLEMENTED
+===================
+
+21 of the 22 procedures of NFS version 3: NULL, GETATTR, SETATTR, LOOKUP,
+ACCESS, READLINK, READ, WRITE, CREATE, MKDIR, SYMLINK, REMOVE, RMDIR,
+RENAME, LINK, READDIR, READDIRPLUS, FSSTAT, FSINFO, PATHCONF and COMMIT.
+The one left out is MKNOD, which answers NFS3ERR_NOTSUPP: there is no
+portable way to make a device node and nothing on an Atari wants one over
+NFS.
+
+Both UDP and TCP, on the same port number, with RPC record marking and
+reassembly for TCP. One process, one select() loop, no forking: a request is
+answered before the next is looked at.
+
+AUTH_UNIX and AUTH_NONE. There is no Kerberos, which is also true of the
+client driver and of NFSv3 as most people run it.
+
+
+FILE HANDLES, AND WHY THEY LOOK LIKE THAT
+=========================================
+
+A handle is the thing a client keeps and hands back for every operation on a
+file, and it has to keep working across a server restart or clients get
+ESTALE and have to remount.
+
+Linux builds its handles from a device number, an inode number and a
+generation count, and relies on the kernel being able to find a file by
+inode. Userspace cannot do that: there is no portable way from an inode
+number back to a path. The usual answer is a cache of issued handles, which
+then has to be persisted somewhere to survive a restart.
+
+This server puts the path itself in the handle, relative to its export.
+Nothing is cached, nothing is written, nothing goes stale when the server is
+restarted, and there is no table to size on a machine with 4 MB. The price is
+a limit on depth: NFSD_FHPATHLEN in config.h, 56 bytes, which is what is left
+of the 64 byte maximum after the magic, the export number and the length.
+A file deeper than that cannot be reached, and says so with
+NFS3ERR_NAMETOOLONG rather than failing in some less obvious way.
+
+Because the path travels through the client, it comes back under the
+client's control, so a decoded handle is treated as hostile input: a
+relative path, no empty components, no "." or "..", nothing with a separator
+inside a component. That confines a handle to the export it names, and
+inside that export a client could reach the same file with LOOKUP anyway.
+There is no cryptographic check and none would help -- it would need a
+secret that itself had to survive a restart.
+
+
+WHAT THIS DOES AND DOES NOT PROTECT
+===================================
+
+The server does its work as whatever user it runs as, which on an Atari is
+the only user there is. Before each operation it checks the file's mode bits
+against the uid the request claims, so a read only file behaves like one and
+an export marked ro really refuses writes.
+
+That check is not a security boundary. The uid in an NFSv3 request is the
+client's own assertion about itself, with nothing to back it up, so anyone
+who can reach the port and set a uid field can present any identity. The
+boundary is the address list in /etc/exports. Treat an export the way you
+would treat a directory shared with every machine on that list.
+
+The port mapper leaves out PMAP_CALLIT, which asks it to make an RPC call on
+the caller's behalf and send back the answer: a one packet request with a
+forged source address produces a large reply aimed at somebody else. NFS has
+no use for it. PMAP_SET and PMAP_UNSET are accepted only from the loopback
+address, so a registration cannot be redirected from the network.
+
+
+LIMITS
+======
+
+  - Files are limited to 2 GB, because MiNT's file position is a signed
+    32 bit value. The size in an attribute reply is a 64 bit field and is
+    reported truthfully, but a READ or WRITE past 2 GB is refused with
+    NFS3ERR_INVAL or NFS3ERR_FBIG. FSINFO reports maxfilesize accordingly.
+  - The largest READ or WRITE is NFSD_MAXDATA, 8192 bytes by default, which
+    is announced through FSINFO so clients use it. Raising it costs memory
+    per connection.
+  - At most NFSD_MAXEXPORTS exports and RPC_MAXCONN TCP connections at once;
+    a further connection is refused rather than displacing an established
+    one. Both are in config.h.
+  - CREATE in EXCLUSIVE mode behaves like GUARDED. Doing it properly means
+    storing the client's verifier with the file so that a retry after a lost
+    reply can be told apart from a second attempt, and there is nowhere to
+    put it. The difference shows only in that case, where this returns
+    NFS3ERR_EXIST instead of success.
+  - MKNOD is not implemented.
+  - No file locking: there is no NLM, so two clients writing the same file
+    are not protected from each other.
+  - The READDIR cookie counts entries rather than using a directory offset,
+    so a listing that is continued re-reads the directory from the start.
+    The cookie verifier is sent as zeroes, which means the server does not
+    claim to detect a directory that changed between calls.
+  - A client's uid is not assumed by the server process, so file ownership
+    of newly created files is the server's, adjusted by the export's squash
+    options.
+
+
+TESTING
+=======
+
+"make check" builds and runs the two unit tests with the host compiler:
+the XDR core and the file handle encoding, including every path traversal
+the handle validation has to refuse.
+
+Three more tests drive the daemons over a socket, which means they can run
+on the machine the code is built on, against the host build:
+
+    cc -o nfsd   nfsd.c   rpc.c xdr.c fh.c exports.c -DHAVE_FSYNC -DHAVE_STATVFS
+    cc -o mountd mountd.c rpc.c xdr.c fh.c exports.c
+    cc -o portmap portmap.c rpc.c xdr.c
+
+    ./t_portmap.py                       # starts its own portmap
+
+    ./mountd -n -p 20048 -e /tmp/exports &
+    ./nfsd   -n -p 20490 -e /tmp/exports &
+    ./t_nfsd_libnfs.py   /tmp/nfsroot 20490 20048
+    ./t_nfsd_security.py /tmp/nfsroot 20490 20048
+
+t_nfsd_libnfs.py drives the server with libnfs, which is a complete NFSv3
+client written by somebody else: a test that passes there says the server
+follows the protocol rather than that it agrees with its own client.
+
+t_nfsd_security.py forges file handles by hand -- naming "..", absolute
+paths, lying about lengths -- because no real client library will build an
+invalid handle, and that is exactly what needs testing.
+
+t_portmap.py encodes the port mapper protocol itself, in Python, rather than
+calling this package's own code.
+
+
+STATUS
+======
+
+Verified on the host: 33 XDR checks, 53 file handle checks, 29 port mapper
+checks, 45 protocol checks against libnfs covering read and write, and 26
+handle forgery attempts, all passing.
+
+On hardware: the three daemons run on a Falcon, and from a Linux host
+"rpcinfo -p" lists all six registrations while "showmount -e" returns the
+export list. That covers the part that could not be tested here -- the
+FreeMiNT socket layer, select() over a mix of UDP and TCP sockets, and the
+RPC record assembly on a TCP connection.
+
+What has had little exercise is everything beyond that first contact:
+sustained reading and writing, several clients at once, and what happens
+when a client disappears mid-request. Expect to find things there.

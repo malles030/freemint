@@ -1,0 +1,21 @@
+# This file gets included by the Makefile in this directory to determine
+# the files that should go only into source distributions.
+
+HEADER = config.h exports.h fh.h nfs3.h rpc.h xdr.h
+
+# The three daemons share the RPC and XDR layer, the exports file reader and
+# the file handle code; only their own source differs.
+COMMON = rpc.c xdr.c fh.c exports.c
+
+OBJS_portmap = portmap.c rpc.c xdr.c
+OBJS_mountd  = mountd.c $(COMMON)
+OBJS_nfsd    = nfsd.c $(COMMON)
+
+# Every source file compiled in this directory, each one only once.
+COBJS = portmap.c mountd.c nfsd.c $(COMMON)
+
+# Host side tests. They are not built for the Atari: they drive the daemons
+# over a socket, so they run wherever the build happens.
+TESTS = t_xdr.c t_fh.c t_portmap.py t_nfsd_libnfs.py t_nfsd_security.py
+
+SRCFILES = $(HEADER) $(COBJS) $(TESTS)
